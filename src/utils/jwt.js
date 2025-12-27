@@ -1,0 +1,34 @@
+const jwt = require('jsonwebtoken');
+
+// Generate access token
+const generateAccessToken = (userId) => {
+    return jwt.sign(
+        { id: userId },
+        process.env.JWT_SECRET,
+        { expiresIn: process.env.JWT_EXPIRE || '15m' }
+    );
+};
+
+// Generate refresh token
+const generateRefreshToken = (userId) => {
+    return jwt.sign(
+        { id: userId },
+        process.env.JWT_REFRESH_SECRET,
+        { expiresIn: process.env.JWT_REFRESH_EXPIRE || '7d' }
+    );
+};
+
+// Verify token
+const verifyToken = (token, secret) => {
+    try {
+        return jwt.verify(token, secret);
+    } catch (error) {
+        return null;
+    }
+};
+
+module.exports = {
+    generateAccessToken,
+    generateRefreshToken,
+    verifyToken
+};
