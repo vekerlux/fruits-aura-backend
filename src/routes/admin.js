@@ -1,154 +1,144 @@
 const express = require('express');
 const router = express.Router();
-const Product = require('../models/Product');
 const Order = require('../models/Order');
 const User = require('../models/User');
-const Review = require('../models/Review');
-const { authMiddleware, adminMiddleware } = require('../middleware/auth');
+const { adminMiddleware } = require('../middleware/auth');
 
-// All admin routes require authentication and admin role
-router.use(authMiddleware, adminMiddleware);
-
-// Dashboard stats
-router.get('/dashboard', async (req, res) => {
+// Get all pending orders (admin only)
+router.get('/pending', adminMiddleware, async (req, res) => {
     try {
-        const totalOrders = await Order.countDocuments();
-        const totalUsers = await User.countDocuments();
-        const totalProducts = await Product.countDocuments();
-        const totalRevenue = await Order.aggregate([
-            { $match: { paymentStatus: 'paid' } },
-            { $group: { _id: null, total: { $sum: '$total' } } }
-        ]);
+        const orders = await Order.find({ status: 'pending' })
+            .populate('userId', 'name email phone role')
+            .sort({ createdAt: -1 });
 
         res.json({
             success: true,
-            data: {
-                totalOrders,
-                totalUsers,
-                totalProducts,
-                totalRevenue: totalRevenue[0]?.total || 0
-            }
+            orders
         });
     } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
+        console.error('Error fetching pending orders:', error);
+        res.status(500).json({ message: 'Error fetching orders' });
     }
 });
 
-// Get all orders
-router.get('/orders', async (req, res) => {
+// Approve an order (admin only)
+router.put('/:id/approve', adminMiddleware, async (req, res) => {
     try {
-        const orders = await Order.find()
-            .sort({ createdAt: -1 })
-            .populate('userId', 'name email')
-            .limit(50);
+        const order = await Order.findById(req.params.id);
 
-        res.json({ success: true, data: { orders } });
+        if (!order) {
+            return res.status(404).json({ message: 'Order not found' });
+        }
+
+        if (order.status !== 'pending') {
+            return res.status(400).json({ message: 'Order is not pending' });
+        }
+
+        order.status = 'approved';
+        order.approvedBy = req.user._id;
+        order.approvedAt = new Date();
+
+        // Allow admin to adjust delivery fee
+        if (req.body.deliveryFee !== undefined) {
+            order.deliveryFee = req.body.deliveryFee;
+            order.total = order.subtotal + order.deliveryFee;
+        }
+
+        await order.save();
+
+        // TODO: Send email notification to customer
+
+        res.json({
+            success: true,
+            message: 'Order approved successfully',
+            order
+        });
     } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
+        console.error('Error approving order:', error);
+        res.status(500).json({ message: 'Error approving order' });
     }
 });
 
-// Update order status
-router.patch('/orders/:id/status', async (req, res) => {
+// Update order status (admin only)
+router.put('/:id/status', adminMiddleware, async (req, res) => {
     try {
         const { status } = req.body;
+        const validStatuses = ['pending', 'approved', 'in-transit', 'delivered', 'cancelled'];
+
+        if (!validStatuses.includes(status)) {
+            return res.status(400).json({ message: 'Invalid status' });
+        }
 
         const order = await Order.findByIdAndUpdate(
             req.params.id,
             { status },
             { new: true }
-        );
+        ).populate('userId', 'name email');
+
+        if (!order) {
+            return res.status(404).json({ message: 'Order not found' });
+        }
 
         res.json({
             success: true,
-            message: 'Order status updated',
-            data: { order }
+            message: `Order status updated to ${status}`,
+            order
         });
     } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
+        console.error('Error updating order status:', error);
+        res.status(500).json({ message: 'Error updating order' });
     }
 });
 
-// Product management (CRUD)
-router.post('/products', async (req, res) => {
+// Get all pending distributors (admin only)
+router.get('/distributors/pending', adminMiddleware, async (req, res) => {
     try {
-        const product = await Product.create(req.body);
-        res.status(201).json({
-            success: true,
-            message: 'Product created',
-            data: { product }
-        });
-    } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
-    }
-});
-
-router.put('/products/:id', async (req, res) => {
-    try {
-        const product = await Product.findByIdAndUpdate(
-            req.params.id,
-            req.body,
-            { new: true, runValidators: true }
-        );
+        const distributors = await User.find({
+            role: 'distributor',
+            approved: false
+        }).select('name email phone createdAt');
 
         res.json({
             success: true,
-            message: 'Product updated',
-            data: { product }
+            distributors
         });
     } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
+        console.error('Error fetching distributors:', error);
+        res.status(500).json({ message: 'Error fetching distributors' });
     }
 });
 
-router.delete('/products/:id', async (req, res) => {
+// Approve a distributor account (admin only)
+router.put('/distributors/:id/approve', adminMiddleware, async (req, res) => {
     try {
-        await Product.findByIdAndUpdate(req.params.id, { isActive: false });
+        const user = await User.findById(req.params.id);
+
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        if (user.role !== 'distributor') {
+            return res.status(400).json({ message: 'User is not a distributor' });
+        }
+
+        user.approved = true;
+        await user.save();
+
+        // TODO: Send approval email
 
         res.json({
             success: true,
-            message: 'Product deleted'
+            message: 'Distributor approved successfully',
+            user: {
+                id: user._id,
+                name: user.name,
+                email: user.email,
+                approved: user.approved
+            }
         });
     } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
-    }
-});
-
-// User Management
-router.get('/users', async (req, res) => {
-    try {
-        const users = await User.find().select('-password');
-        res.json({ success: true, data: { users } });
-    } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
-    }
-});
-
-router.patch('/users/:id/role', async (req, res) => {
-    try {
-        const { role } = req.body;
-        const user = await User.findByIdAndUpdate(
-            req.params.id,
-            { role },
-            { new: true }
-        ).select('-password');
-
-        res.json({
-            success: true,
-            message: 'User role updated',
-            data: { user }
-        });
-    } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
-    }
-});
-
-router.delete('/users/:id', async (req, res) => {
-    try {
-        await User.findByIdAndDelete(req.params.id);
-        res.json({ success: true, message: 'User deleted' });
-    } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
+        console.error('Error approving distributor:', error);
+        res.status(500).json({ message: 'Error approving distributor' });
     }
 });
 

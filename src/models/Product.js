@@ -19,10 +19,22 @@ const productSchema = new mongoose.Schema({
         required: [true, 'Price is required'],
         min: [0, 'Price cannot be negative']
     },
+    bundlePrice: {
+        type: Number,
+        min: [0, 'Bundle price cannot be negative']
+    },
+    bundleSize: {
+        type: Number,
+        default: 5
+    },
     category: {
         type: String,
         required: true,
-        enum: ['Citrus Blends', 'Berry Boost', 'Tropical Mix', 'Green Detox', 'Fresh Mix', 'Coming Soon']
+        enum: ['Fresh Mix', 'Coming Soon']
+    },
+    isComingSoon: {
+        type: Boolean,
+        default: false
     },
     color: {
         type: String,
@@ -40,6 +52,10 @@ const productSchema = new mongoose.Schema({
         sugar: String,
         vitaminC: String,
         protein: String
+    },
+    voteCount: {
+        type: Number,
+        default: 0
     },
     inventory: {
         stock: {

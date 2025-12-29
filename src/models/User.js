@@ -26,6 +26,23 @@ const userSchema = new mongoose.Schema({
         enum: ['consumer', 'distributor', 'admin'],
         default: 'consumer'
     },
+    approved: {
+        type: Boolean,
+        default: function () {
+            return this.role === 'consumer'; // Auto-approve consumers
+        }
+    },
+    dailyOrders: {
+        date: Date,
+        bottleCount: {
+            type: Number,
+            default: 0
+        },
+        aurasetCount: {
+            type: Number,
+            default: 0
+        }
+    },
     subscription: {
         plan: {
             type: String,

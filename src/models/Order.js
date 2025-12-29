@@ -32,18 +32,28 @@ const orderSchema = new mongoose.Schema({
     },
     status: {
         type: String,
-        enum: ['pending', 'confirmed', 'preparing', 'ready', 'delivered', 'cancelled'],
+        enum: ['pending', 'approved', 'in-transit', 'delivered', 'cancelled'],
         default: 'pending'
     },
+    approvedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+    },
+    approvedAt: Date,
+
     paymentStatus: {
         type: String,
         enum: ['pending', 'paid', 'failed', 'refunded'],
         default: 'pending'
     },
+    deliveryFee: {
+        type: Number,
+        default: 0
+    },
     paymentMethod: {
         type: String,
         enum: ['card', 'cash'],
-        default: 'card'
+        default: 'cash' // Changed default from 'card' to 'cash'
     },
     stripePaymentId: String,
     deliveryAddress: {
