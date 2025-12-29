@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Product = require('../models/Product');
 const User = require('../models/User');
-const { protect } = require('../middleware/auth');
+const { authMiddleware } = require('../middleware/auth');
 
 // Get all products with filtering and pagination
 router.get('/', async (req, res) => {
@@ -69,7 +69,7 @@ router.get('/:id', async (req, res) => {
     }
 });
 // Vote for a product
-router.post('/:id/vote', protect, async (req, res) => {
+router.post('/:id/vote', authMiddleware, async (req, res) => {
     try {
         const product = await Product.findById(req.params.id);
 
